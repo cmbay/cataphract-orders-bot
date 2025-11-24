@@ -1,4 +1,4 @@
-name: Unacknowledged Scrolls Report
+name: CoRef Scrolls Report
 
 on:
   schedule:
