@@ -1,0 +1,68 @@
+name: Unacknowledged Scrolls Report
+
+on:
+  schedule:
+    # 5:00 UTC ≈ 10:00 PM America/Los_Angeles (PDT). Adjust as you prefer.
+    - cron: "0 7,21 * * *"
+  workflow_dispatch:
+    inputs:
+      channel_set:
+        description: "Which channel set to scan? (default/set1/set2/all)"
+        default: "default"
+        required: false
+      window_hours:
+        description: "How many hours back to scan"
+        default: "24"
+        required: false
+      report_channel_id:
+        description: "Override target channel ID (optional)"
+        required: false
+      include_bots:
+        description: "Include bot-authored messages? (true/false)"
+        default: "false"
+        required: false
+      dry_run:
+        description: "Don't post, just log output (true/false)"
+        default: "false"
+        required: false
+
+jobs:
+  run-report:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: unack-scrolls
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r bot/requirements.txt
+
+      - name: Run report
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+          DISCORD_ACK_USER_IDS: ${{ secrets.DISCORD_ACK_USER_IDS }}
+          # Default report channel from secrets; allow override via manual input
+          REPORT_CHANNEL_ID: ${{ github.event.inputs.report_channel_id || secrets.CO_REF_REPORT_CHANNEL_ID }}
+          # Knobs
+          WINDOW_HOURS: ${{ github.event.inputs.window_hours || '24' }}
+          INCLUDE_BOTS: ${{ github.event.inputs.include_bots || 'false' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          # Optional emoji config
+          CUSTOM_SCROLL_ID: ${{ secrets.CUSTOM_SCROLL_ID }}
+          SCROLL_UNICODE: ${{ vars.SCROLL_UNICODE }}
+          CHECK_UNICODE: ${{ vars.CHECK_UNICODE }}
+          # Optional allowlists - selected by channel_set input
+          ALLOW_CHANNEL_IDS: ${{ github.event.inputs.channel_set == 'set1' && vars.ALLOW_CHANNEL_IDS_SET1 || github.event.inputs.channel_set == 'set2' && vars.ALLOW_CHANNEL_IDS_SET2 || github.event.inputs.channel_set == 'all' && '' || vars.CO_REF_ALLOW_CHANNEL_IDS }}
+          ALLOW_CATEGORY_IDS: ${{ github.event.inputs.channel_set == 'set1' && vars.ALLOW_CATEGORY_IDS_SET1 || github.event.inputs.channel_set == 'set2' && vars.ALLOW_CATEGORY_IDS_SET2 || github.event.inputs.channel_set == 'all' && '' || vars.CO_REF_ALLOW_CATEGORY_IDS }}
+          # Safety cap
+          MAX_RESULTS: ${{ vars.MAX_RESULTS }}
+        run: |
+          python bot/report.py
